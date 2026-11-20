@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Power">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Power</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1d24; --line: #2a2e38; --text: #eef0f4; --muted: #8b92a1;
+    --on: #3ecf74; --off: #5b6170; --accent: #4c8dff; --danger: #ff5c5c; --warn: #f5b94a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 20px);
+  }
+  main { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 20px; display: flex; justify-content: space-between; align-items: center; }
+  h1 button { font-size: 14px; padding: 6px 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; }
+  .dot.on { background: var(--on); box-shadow: 0 0 10px var(--on); }
+  .name { font-size: 20px; font-weight: 600; flex: 1; }
+  .state { color: var(--muted); font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    font: inherit; color: var(--text); background: #252a33; border: 1px solid var(--line);
+    border-radius: 12px; padding: 14px 10px; cursor: pointer;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; }
+  .wake { background: var(--accent); border-color: var(--accent); grid-column: 1 / -1; font-weight: 600; }
+  .shutdown { color: var(--danger); }
+  .sleep { color: var(--warn); }
+  input {
+    width: 100%; font: inherit; padding: 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: #252a33; color: var(--text); margin-bottom: 12px;
+  }
+  #login button { width: 100%; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  #toast {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); transform: translateX(-50%);
+    background: #2b303b; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: opacity .2s;
+    pointer-events: none; max-width: calc(100% - 32px); text-align: center;
+  }
+  #toast.show { opacity: 1; }
+  .hidden { display: none; }
+  .empty { color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <section id="login" class="hidden">
+    <h1>Power</h1>
+    <form class="card" id="loginForm">
+      <input id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="submit">Unlock</button>
+    </form>
+  </section>
+
+  <section id="app" class="hidden">
+    <h1>Power <button id="logout">Lock</button></h1>
+    <div id="list"><p class="empty">Loading…</p></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const store = {
+  get() { try { return localStorage.getItem("pw") || ""; } catch { return ""; } },
+  set(v) { try { localStorage.setItem("pw", v); } catch {} },
+  clear() { try { localStorage.removeItem("pw"); } catch {} },
+};
+let password = store.get();
+let timer;
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+async function api(method, path) {
+  const res = await fetch(path, { method, headers: { "X-Password": password } });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin("Wrong password"); throw new Error("auth"); }
+  if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+  return body;
+}
+
+function showLogin(msg) {
+  clearInterval(timer);
+  store.clear(); password = "";
+  $("#app").classList.add("hidden");
+  $("#login").classList.remove("hidden");
+  if (msg) toast(msg);
+}
+
+function showApp() {
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  refresh();
+  clearInterval(timer);
+  timer = setInterval(refresh, 5000);
+}
+
+const LABELS = { wake: "Turn on", sleep: "Sleep", restart: "Restart", shutdown: "Shut down" };
+
+function render(computers) {
+  const list = $("#list");
+  if (!computers.length) { list.innerHTML = '<p class="empty">No computers in config.json</p>'; return; }
+  list.innerHTML = "";
+  for (const c of computers) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="head">
+        <span class="dot ${c.online ? "on" : ""}"></span>
+        <span class="name"></span>
+        <span class="state">${c.online ? "On" : "Off / asleep"}</span>
+      </div>
+      <div class="grid">
+        <button class="wake" data-a="wake" ${c.online ? "disabled" : ""}>Turn on</button>
+        <button class="sleep" data-a="sleep" ${c.online ? "" : "disabled"}>Sleep</button>
+        <button data-a="restart" ${c.online ? "" : "disabled"}>Restart</button>
+        <button class="shutdown" data-a="shutdown" style="grid-column:1/-1" ${c.online ? "" : "disabled"}>Shut down</button>
+      </div>`;
+    card.querySelector(".name").textContent = c.name;
+    card.querySelectorAll("button").forEach((b) => b.onclick = () => act(c, b.dataset.a, b));
+    list.appendChild(card);
+  }
+}
+
+async function refresh() {
+  try { render(await api("GET", "/api/computers")); }
+  catch (e) { if (e.message !== "auth") toast(e.message); }
+}
+
+async function act(c, action, btn) {
+  if (action !== "wake" && !confirm(`${LABELS[action]} ${c.name}?`)) return;
+  btn.disabled = true;
+  try {
+    await api("POST", `/api/computers/${encodeURIComponent(c.id)}/${action}`);
+    toast(action === "wake" ? `Waking ${c.name}… give it a minute` : `${LABELS[action]}: ${c.name}`);
+  } catch (e) { if (e.message !== "auth") toast(e.message); }
+  setTimeout(refresh, 3000);
+}
+
+$("#loginForm").onsubmit = async (e) => {
+  e.preventDefault();
+  password = $("#pw").value;
+  try { await api("GET", "/api/computers"); store.set(password); $("#pw").value = ""; showApp(); }
+  catch (err) { if (err.message !== "auth") toast(err.message); }
+};
+$("#logout").onclick = () => showLogin();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && password) refresh(); });
+
+password ? showApp() : showLogin();
+</script>
+</body>
+</html>

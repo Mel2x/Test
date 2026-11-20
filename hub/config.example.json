@@ -1,0 +1,24 @@
+{
+  "password": "change-me",
+  "port": 8080,
+  "computers": [
+    {
+      "id": "windows",
+      "name": "Windows PC",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "ip": "192.168.1.50",
+      "broadcast": "192.168.1.255",
+      "agent_port": 8765,
+      "agent_token": "change-me-windows"
+    },
+    {
+      "id": "mac",
+      "name": "Mac",
+      "mac": "AA:BB:CC:DD:EE:02",
+      "ip": "192.168.1.51",
+      "broadcast": "192.168.1.255",
+      "agent_port": 8765,
+      "agent_token": "change-me-mac"
+    }
+  ]
+}

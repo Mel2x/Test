@@ -1,0 +1,4 @@
+# Real configs hold your passwords/tokens. Never commit them.
+hub/config.json
+agent/agent_config.json
+__pycache__/

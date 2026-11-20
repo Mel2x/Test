@@ -1,0 +1,5 @@
+{
+  "token": "change-me",
+  "port": 8765,
+  "dry_run": false
+}
